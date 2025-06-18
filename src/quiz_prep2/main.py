@@ -1,6 +1,6 @@
 import datetime
 import os
-from agents import Agent, AgentOutputSchema, FunctionToolResult, ItemHelpers, ModelSettings, Runner, AsyncOpenAI, OpenAIChatCompletionsModel, ToolsToFinalOutputResult , handoff,Handoff,function_tool , AgentOutputSchemaBase, set_trace_processors , RunContextWrapper
+from agents import Agent, AgentOutputSchema, FunctionToolResult, ItemHelpers, ModelSettings, RunHooks, Runner, AsyncOpenAI, OpenAIChatCompletionsModel, ToolsToFinalOutputResult , handoff,Handoff,function_tool , AgentOutputSchemaBase, set_trace_processors , RunContextWrapper
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX , prompt_with_handoff_instructions
 from agents.run import RunConfig
 from dotenv import load_dotenv
@@ -152,24 +152,30 @@ config = RunConfig(
 # we can customized the behaviour of the tools using the tool_use_behavior and also by defining our own behaviour method
 
 #  CASE 6 , What will happen when we set the tool_choice to required and dont pass the tools to the agent
-@function_tool
-def get_current_time():
-    print('Getting current time')
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-@function_tool
-def get_current_date():
-    print('Getting current date')
-    return datetime.date.today().strftime("%Y-%m-%d")
-basic_agent= Agent(
-    name = "Basic Agent",
-    instructions="You are a basic agent that can answer questions. you have two tools to call get_current_time and get_current_date when you need to get the current time or date , when the user asks for the current time , you should call the get_current_time tool and when the user asks for the current date , you should call the get_current_date tool",
-    model = model,
-    tools=[get_current_date , get_current_time],
-    tool_use_behavior=['get_current_date'],
-    # model_settings=ModelSettings(tool_choice="none" )
-    reset_tool_choice=False,
+# counter = 0
+# class CustomHook(RunHooks):
+#     async def on_agent_start(self, context:RunContextWrapper[Any], agent:Agent):
+#         counter+1
+#         print(f"Turn {counter} started.")
+# run = CustomHook()        
+# @function_tool
+# def get_current_time():
+#     print('Getting current time')
+#     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# @function_tool
+# def get_current_date():
+#     print('Getting current date')
+#     return datetime.date.today().strftime("%Y-%m-%d")
+# basic_agent= Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions. you have two tools to call get_current_time and get_current_date when you need to get the current time or date , when the user asks for the current time , you should call the get_current_time tool and when the user asks for the current date , you should call the get_current_date tool",
+#     model = model,
+#     tools=[get_current_date , get_current_time],
+#     tool_use_behavior='run_llm_again',
+#     # model_settings=ModelSettings(tool_choice="none" )
+#     # reset_tool_choice=False,
     
-)
+# )
 
 # When we dont pass the tools to the agent and set the tool_choice to required then the llm will not call any tool and will return am expected tool code in the output
 
@@ -211,9 +217,44 @@ basic_agent= Agent(
 #     # model_settings=ModelSettings(tool_choice="none" )
 #     # output_type=AgentRespose
 # )
+
+# Case 8
+#  Checking the max turns when a tool is called 
+# @function_tool
+# def get_weather(location: str) -> str:
+#     '''
+#     Get the weather for a given location
+
+#     Args:
+#         location (str): The location to get the weather for
+
+#     Returns:
+#         str: The weather for the location
+#     '''
+#     return f'''Weather in {location} is sunny '''
+
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent , that have a tool to get the weather of the given city",
+#     model = model,
+#     tools=[get_weather]
+# )
+#  A complete turn is a complete incovation of the llm , when a llm decides to call the tool , the Runner call the tool , at that time 1 turn is completed , and then the tool output with the input is passed to the llm and then the llm produces the output and then the turn is 2nd , So if the max turns is 1 and a  tool will be called then there will be a max turns exceeded error , 
+# But if our llm does not initiate a tool call and can response on its own then max_turns =1 will be enough
+
+#  CASE 8 , CREATING CUSTOM FUNCTION TOOL
+class weather_response(BaseModel):
+    city : str
+    country : str
+    current_season : str 
+
+def get_weather(info : str):
+    return info
+
+
 async def run_agent():
-    result = await Runner.run(starting_agent=basic_agent, input="get the current time and" , max_turns=
-                              5)
+    result = await Runner.run(starting_agent=basic_agent, input="Hi" , max_turns=1)
+    
     print(result.final_output)
     
 
