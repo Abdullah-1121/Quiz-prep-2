@@ -1,3 +1,4 @@
+import datetime
 import os
 from agents import Agent, AgentOutputSchema, ItemHelpers, ModelSettings, Runner, AsyncOpenAI, OpenAIChatCompletionsModel , handoff,Handoff,function_tool , AgentOutputSchemaBase, set_trace_processors , RunContextWrapper
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX , prompt_with_handoff_instructions
@@ -35,7 +36,118 @@ config = RunConfig(
     model=model,
     model_provider=external_client,
     tracing_disabled=True,
-    workflow_name='Quiz Prep Workflow',
+    workflow_name='Quiz Prep Workflow 2',
 )
+
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions.",
+#     model = model
+# )
+
+#  EDGE CASES
+#  CASE 1
+#  Missing Instructions and name
+# basic_agent = Agent(
+#     name = "",
+#     instructions="",
+#     model = model
+# )
+# When instructions or name of the agent is missing , the agent will run as usual and the llm will provide a generic answer
+
+#  CASE 2
+# Providing with the wrong model name 
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions.",
+#     model = model
+# )
+#  Not only Model name is not affecting anything , But also if we dont provide the model name , it will also run
+#  This is becuase we are passing the config in the run config ,
+# 
+# 
+#  If we remove the run Config from the Runner.run then we
+#  have to provide the correct model  in the Agent class
+
+# CASE 3
+#  Handoffs
+#  Creating two more agents to test the handoff
+# math_agent = Agent(
+#     name = "Math Agent",
+#     instructions = "You are a math agent that can answer math related questions.",
+#     model = model ,
+#     handoff_description="Answer math related questions" # Description of the Agent when used in handoffs
+    
+# )
+
+# computer_science_agent = Agent(
+#     name = "Computer Science Agent",
+#     instructions = "You are a computer science agent that can answer computer science related questions.",
+#     model = model,
+#     handoff_description="Answer computer science related questions" # Description of the Agent when used in handoffs
+# )
+
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer basic questions , if the query is related to Math ,  Handoff to the Math agent and if the query is related to Computer Science , Handoff to the Computer Science agent",
+#     model = model,
+#     handoffs=[computer_science_agent , math_agent]
+# )
+# Missing a handoff agent but telling in the instructions , 
+#  We pass the Math query and did not include in the handoffs of the agent but we have included in the instructions , and on the other hand we have passed the computer science agent , it handoffs to the Computer Science agent when any type of math or computer science related question is asked , Same for the other case , IF ONE AGENT IS NOT PROVIDED BUT INCLUDED IN THE INSTRUCTIONS THEN THE LLM WILL HANDOFF TO THE PROVIDED AGENT REGARDLESS OF IT IS BEING THE RIGHT AGENT.
+
+# CASE 4    OUTPUT TYPE
+# class AgentRespose(BaseModel):
+#     response : dict[int , str]
+
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions.",
+#     model = model,
+#     output_type=AgentRespose
+# )
+#  When we pass a dict or a custom (complex) type of data type , then the agent raises an exception of 
+# (agents.exceptions.UserError: Strict JSON schema is enabled, but the output type is not valid. Either make the output type strict, or pass output_schema_strict=False to your Agent()) , in our case dict[int , str]
+#  TO RESOLVE THIS WE USE output_schema_strict=False
+
+# class AgentRespose(BaseModel):
+#     query : str
+#     response : str
+    
+# basic_agent= Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions.",
+#     model = model,
+#     output_type=AgentRespose
+# )
+
+# CASE 5 , TOOL USE BEHAVIOUR
+@function_tool
+def get_current_time():
+    print('Getting current time')
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+@function_tool
+def get_current_date():
+    print('Getting current date')
+    return datetime.date.today().strftime("%Y-%m-%d")
+basic_agent= Agent(
+    name = "Basic Agent",
+    instructions="You are a basic agent that can answer questions. you have two tools to call get_current_time and get_current_date when you need to get the current time or date , when the user asks for the current time , you should call the get_current_time tool and when the user asks for the current date , you should call the get_current_date tool",
+    model = model,
+    tools=[get_current_time , get_current_date],
+    tool_use_behavior="stop_on_first_tool"
+    
+)
+
+# When we tell the llm about the tools in the instructions but dont pass them to the Agent class then the llm outputs a make up tool code , e.g in our case the output of the llm is ```tool_code
+# get_current_time()
+# ```
+
+async def run_agent():
+    result = await Runner.run(starting_agent=basic_agent, input="Tell me current Date? ")
+    print(result.final_output)
+
+asyncio.run(run_agent())
 
 
