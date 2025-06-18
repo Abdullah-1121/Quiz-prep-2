@@ -243,19 +243,75 @@ config = RunConfig(
 # But if our llm does not initiate a tool call and can response on its own then max_turns =1 will be enough
 
 #  CASE 8 , CREATING CUSTOM FUNCTION TOOL
-class weather_response(BaseModel):
-    city : str
-    country : str
-    current_season : str 
+# class weather_response(BaseModel):
+#     city : str
+#     country : str
+#     current_season : str 
+# @function_tool
+# def get_weather(city : str):
+#     '''
+#       Get the weather for a given location
 
-def get_weather(info : str):
-    return info
+#       Args:
+#           location (str): The location to get the weather for
+
+#       Returns:
+#           str: The weather for the location
+#       '''
+#     # return f'''Weather is {city} '''
+#     raise ValueError("Custom Error")
+    
+  
+
+
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent , that have a tool to get the weather of the given city",
+#     model = model,
+#     tools=[get_weather]
+   
+# )
+
+#  When an error is raised by the tool , it will not halt the Agent loop , this error is provided to the llm and then the llm provides the error message
+
+
+#  CASE 10 : RUNRESULTS 
+@function_tool
+def get_weather(city : str):
+    '''
+      Get the weather for a given location
+
+      Args:
+          location (str): The location to get the weather for
+
+      Returns:
+          str: The weather for the location
+      '''
+    # return f'''Weather is {city} '''
+    raise ValueError("Custom Error")
+    
+class weather_response(BaseModel):
+    city : str 
+    weather : str  
+
+
+basic_agent = Agent(
+    name = "Basic Agent",
+    instructions="You are a basic agent , that have a tool to get the weather of the given city",
+    model = model,
+    tools=[get_weather],
+    output_type=weather_response
+   
+)
+#  We will validate the final output through final_ouptu_as method , and if the output is not valid then the method will raise an exception TypeError: Final output is not of type weather_response : 
+# result.final_output_as(weather_response , raise_if_incorrect_type=True)
 
 
 async def run_agent():
-    result = await Runner.run(starting_agent=basic_agent, input="Hi" , max_turns=1)
-    
+    result = await Runner.run(starting_agent=basic_agent, input="Hi ! tell the weather of the paris" , max_turns=5)
     print(result.final_output)
+    # print(result.final_output_as(weather_response , raise_if_incorrect_type=True))
+    print( result.to_input_list)
     
 
 asyncio.run(run_agent())
