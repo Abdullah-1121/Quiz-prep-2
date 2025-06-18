@@ -1,6 +1,6 @@
 import datetime
 import os
-from agents import Agent, AgentOutputSchema, ItemHelpers, ModelSettings, Runner, AsyncOpenAI, OpenAIChatCompletionsModel , handoff,Handoff,function_tool , AgentOutputSchemaBase, set_trace_processors , RunContextWrapper
+from agents import Agent, AgentOutputSchema, FunctionToolResult, ItemHelpers, ModelSettings, Runner, AsyncOpenAI, OpenAIChatCompletionsModel, ToolsToFinalOutputResult , handoff,Handoff,function_tool , AgentOutputSchemaBase, set_trace_processors , RunContextWrapper
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX , prompt_with_handoff_instructions
 from agents.run import RunConfig
 from dotenv import load_dotenv
@@ -122,11 +122,40 @@ config = RunConfig(
 # )
 
 # CASE 5 , TOOL USE BEHAVIOUR
+# @function_tool
+# def get_current_time():
+#     print('Getting current time')
+#     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# # Custom Behaviour of TOOLS
+# def my_behavior(ctx: RunContextWrapper[None], tools: list[FunctionToolResult]) -> ToolsToFinalOutputResult:
+#     if len(tools) >= 2:
+#         return ToolsToFinalOutputResult(is_final_output= True ,final_output=tools[1].output)
+#     return ToolsToFinalOutputResult(is_final_output= False ,continue_to_llm=True)
+
+# @function_tool
+# def get_current_date():
+#     print('Getting current date')
+#     return datetime.date.today().strftime("%Y-%m-%d")
+# basic_agent= Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions. you have two tools to call get_current_time and get_current_date when you need to get the current time or date , when the user asks for the current time , you should call the get_current_time tool and when the user asks for the current date , you should call the get_current_date tool",
+#     model = model,
+#     tools=[get_current_time , get_current_date],
+#     tool_use_behavior="run_llm_again"
+    
+# )
+
+# When we tell the llm about the tools in the instructions but dont pass them to the Agent class then the llm outputs a make up tool code , e.g in our case the output of the llm is ```tool_code
+# get_current_time()
+# ```
+# we can customized the behaviour of the tools using the tool_use_behavior and also by defining our own behaviour method
+
+#  CASE 6 , What will happen when we set the tool_choice to required and dont pass the tools to the agent
 @function_tool
 def get_current_time():
     print('Getting current time')
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 @function_tool
 def get_current_date():
     print('Getting current date')
@@ -135,18 +164,58 @@ basic_agent= Agent(
     name = "Basic Agent",
     instructions="You are a basic agent that can answer questions. you have two tools to call get_current_time and get_current_date when you need to get the current time or date , when the user asks for the current time , you should call the get_current_time tool and when the user asks for the current date , you should call the get_current_date tool",
     model = model,
-    tools=[get_current_time , get_current_date],
-    tool_use_behavior="stop_on_first_tool"
+    tools=[get_current_date , get_current_time],
+    tool_use_behavior=['get_current_date'],
+    # model_settings=ModelSettings(tool_choice="none" )
+    reset_tool_choice=False,
     
 )
 
-# When we tell the llm about the tools in the instructions but dont pass them to the Agent class then the llm outputs a make up tool code , e.g in our case the output of the llm is ```tool_code
-# get_current_time()
+# When we dont pass the tools to the agent and set the tool_choice to required then the llm will not call any tool and will return am expected tool code in the output
+
+# What if our query is not demanding to use the tool but we set the tool_choice to required ?
+
+# A Bad Request Error is Received when we pass a query that is not demanding to use the tool but we set the tool_choice to required
+
+# What if our query demands the tool calls but we have set the tool choice to none ?
+
+# Then LLM provides the output that it has the tools but it does not call any tool , this is the response from the llm : ```tool_code
+# today = get_current_date()
+# current_time = get_current_time()
+# print(f"Today's date is {today} and the current time is {current_time}")
 # ```
 
+# What if we set the reset_tool_choice to False?
+
+
+# CASE 7 , if we set the tool_use_behaviour to stop at first tool and the tool output does not enforces the agent output type 
+
+# class AgentRespose(BaseModel):
+#     day: str
+#     month : int 
+#     year : int
+# @function_tool
+# def get_current_date():
+#     print('Getting current date')
+#     # return datetime.date.today().strftime("%Y-%m-%d")
+#     response = AgentRespose(day=datetime.date.today().strftime("%Y-%m-%d") , month=datetime.date.today().month , year=datetime.date.today().year)
+#     tool_output = response.model_dump(mode="json")
+#     print('DEBUG' , tool_output)
+#     return tool_output
+# basic_agent= Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent that can answer questions. you have two tools to call get_current_time and get_current_date when you need to get the current time or date , when the user asks for the current time , you should call the get_current_time tool and when the user asks for the current date , you should call the get_current_date tool",
+#     model = model,
+#     tools=[get_current_date],
+#     tool_use_behavior="run_llm_again",
+#     # model_settings=ModelSettings(tool_choice="none" )
+#     # output_type=AgentRespose
+# )
 async def run_agent():
-    result = await Runner.run(starting_agent=basic_agent, input="Tell me current Date? ")
+    result = await Runner.run(starting_agent=basic_agent, input="get the current time and" , max_turns=
+                              5)
     print(result.final_output)
+    
 
 asyncio.run(run_agent())
 
