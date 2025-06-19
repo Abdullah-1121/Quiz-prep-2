@@ -1,6 +1,7 @@
 import datetime
 import os
-from agents import Agent, AgentOutputSchema, FunctionToolResult, ItemHelpers, ModelSettings, RunHooks, Runner, AsyncOpenAI, OpenAIChatCompletionsModel, ToolsToFinalOutputResult , handoff,Handoff,function_tool , AgentOutputSchemaBase, set_trace_processors , RunContextWrapper
+from agents import Agent, AgentOutputSchema, FunctionToolResult, GuardrailFunctionOutput, InputGuardrailTripwireTriggered, ItemHelpers, ModelSettings, OutputGuardrailTripwireTriggered, RunHooks, Runner, AsyncOpenAI, OpenAIChatCompletionsModel, TResponseInputItem, ToolsToFinalOutputResult , handoff,Handoff,function_tool , AgentOutputSchemaBase, input_guardrail, output_guardrail, set_trace_processors , RunContextWrapper , handoffs , HandoffInputData , HandoffInputFilter 
+from agents.extensions import handoff_filters
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX , prompt_with_handoff_instructions
 from agents.run import RunConfig
 from dotenv import load_dotenv
@@ -276,42 +277,234 @@ config = RunConfig(
 
 
 #  CASE 10 : RUNRESULTS 
-@function_tool
-def get_weather(city : str):
-    '''
-      Get the weather for a given location
+# @function_tool
+# def get_weather(city : str):
+#     '''
+#       Get the weather for a given location
 
-      Args:
-          location (str): The location to get the weather for
+#       Args:
+#           location (str): The location to get the weather for
 
-      Returns:
-          str: The weather for the location
-      '''
-    # return f'''Weather is {city} '''
-    raise ValueError("Custom Error")
+#       Returns:
+#           str: The weather for the location
+#       '''
+#     # return f'''Weather is {city} '''
+#     raise ValueError("Custom Error")
     
-class weather_response(BaseModel):
-    city : str 
-    weather : str  
+# class weather_response(BaseModel):
+#     city : str 
+#     weather : str  
 
 
-basic_agent = Agent(
-    name = "Basic Agent",
-    instructions="You are a basic agent , that have a tool to get the weather of the given city",
-    model = model,
-    tools=[get_weather],
-    output_type=weather_response
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions="You are a basic agent , that have a tool to get the weather of the given city",
+#     model = model,
+#     tools=[get_weather],
+#     output_type=weather_response
    
-)
+# )
 #  We will validate the final output through final_ouptu_as method , and if the output is not valid then the method will raise an exception TypeError: Final output is not of type weather_response : 
 # result.final_output_as(weather_response , raise_if_incorrect_type=True)
 
 
+#      ------------------------------------------HANDOFFS-----------------------------------------
+
+# maths_agent = Agent(
+#     name = "Math Agent",
+#     instructions="You are a math Agent , that is specialised in math related questions",
+#     handoff_description="Answer math related questions" ,
+#     model = model,  
+# )
+# coding_agent = Agent(
+#     name = "Coding Agent",
+#     instructions="You are a coding Agent , that is specialised in coding related questions",
+#     handoff_description="Answer coding related questions" ,
+#     model = model, 
+# )
+# # Handoff Data that is passed by the llm
+# class HandoffData(BaseModel):
+#     reason : str 
+#     agent_name : str
+# #  Creating the function that runs when a handoff will happen
+# def on_handoff(context: RunContextWrapper[Any], data  : HandoffData ):
+#     print(f'''Handing off to {data.agent_name} because {data.reason}''')
+#     # raise Exception(f'''An Exceprtion Occured''')
+
+# # Creating a Custom input_filter for the handoff        
+# def math_handoff_message_filter(handoff_message_data: HandoffInputData) -> HandoffInputData:
+#     """Filter the handoff messages to Math Agent."""
+#     # First, remove any tool-related message from the message history.
+#     handoff_message_data = handoff_filters.remove_all_tools(handoff_message_data)
+#     return handoff_message_data
+#     # raise Exception(f'''An Exceprtion Occured''')
+# # Now creating the handoff Objeect using handoff function
+# handoff_to_maths_agent = handoff(
+#     agent = maths_agent,
+#     tool_name_override='Transfer_to_Coding_Agent',
+#     input_filter=math_handoff_message_filter,
+#     on_handoff=on_handoff,
+#     input_type=HandoffData
+# )
+# class dummy_data(BaseModel):
+#     dummy : str
+# handoff_to_coding_agent = handoff(
+#     agent = coding_agent,
+#     tool_name_override='Transfer_to_Coding_Agent',
+#     input_filter=math_handoff_message_filter,
+#     on_handoff=on_handoff,
+#     input_type=HandoffData
+# )
+# basic_agent = Agent(
+#     name = "Basic Agent",
+#     instructions=f'''{RECOMMENDED_PROMPT_PREFIX}You are a basic agent , you have two specialized agents , Math Agent and a Coding Agent , When the query is related to Math handoff to the Math Agent and When the query is related to Coding handoff to the Coding Agent''',
+#     model = model,
+#     handoffs=[handoff_to_coding_agent , handoff_to_maths_agent]
+# )
+# what will happen if we provide the same tool_name for both agents when handoff ?
+#  LLM will not be able to choose which agent to handoff to and thus provided a NULL response in my case (Handoff was needed to solve the query , and i named both the agents as Transfer_to_Coding_Agent )
+#  In the other case , when i pass the coding query and named the both agents as Transfer_to_Math_Agent , then the llm is still manage to call the Transfer to the coding agent and provide the response.
+
+
+# what will happen if we defined the handoff instructions but we have not passed the handoff object to the basic agent and we are asking the llm to handoff to that agent by asking the specific agent related query?
+
+# Answer : LLM halucinated and handoff to Math agent behind the scenes but it has shown that it handed off the coding agent that is not defined yet in the handoffs of the agent.
+
+#  WHEN WE DONT PASS THE HANDOFF OBJECT TO THE BASIC AGENT BUT WE HAVE PASSED THE INSTRUCTIONS FOR THAT AGENT AND ASK THE LLM TO HANDOFF TO THE AGENT BY ASKING THE SPECIFIC AGENT RELATED QUERY : THEN THE LLM WILL HANDOFF TO THE PRESENT AGENT REGARDLESS OF IT IS THE RIGHT AGENT OR NOT.
+
+# WHAT IF WE NOT PROVIDE ANY HANDOFF AND THE LLM TRY TO HANDOFF AS IN THE INSTRUCTIONS WHAT WILL HAPPEN?
+
+# ANSWER : THE LLM WILL GENERATE A RANDOM HANDOFF TOOL CODE , LIKE THIS : ```tool_code
+# transfer_to_math_agent("What is a square root in maths")
+# ```
+
+
+# WHAT WILL HAPPEN IF THE ON_HANDOFF THROWS AN EXCEPTION ?
+
+# THE RUN LOOP WILL STOP AND AN ERROR IS RAISED
+
+# WHAT WILL HAPPEN IF THE INPUT DATA EXPECTED BY THE HANDOFF IS NOT CORRECT ?
+
+# MODEL BEHAVIOUR ERROR : INVALID JSON , PYDANTIC CORE VALIDATION ERROR 
+
+
+# WHAT IF THE INPUT-FILTER THROWS AN EXCEPTION?
+
+# AGENT LOOP CRASHES CAUSES AN ERROR / EXCEPTION
+
+# WHAT IF WE MAKE THE ON_HANDOFF FUNCTION SYNC?
+
+# NOTHING WILL HAPPEN , THE EXECUTION IS NORMAL
+
+
+# -----------------------------------------------------------------------------------------------
+#                                     GUARDRAILS
+# -----------------------------------------------------------------------------------------------
+
+
+# creating output type
+class is_math(BaseModel):
+    is_math : bool
+    reason : str
+# creating a guardrail agent 
+check_maths_agent = Agent(
+    name = "math_checker",
+    instructions="Check whether the query is related to math or not",
+    model=model,
+    output_type=is_math
+)
+class is_physics(BaseModel):
+    is_physics : bool
+    reason : str
+check_physics_agent = Agent(
+    name = "physics_checker",
+    instructions="Check whether the query is related to physics or not",
+    model=model,
+    output_type=is_physics
+)
+@input_guardrail
+async def math_guardrail(ctx : RunContextWrapper[None] , agent : Agent ,  input: str | list[TResponseInputItem])->GuardrailFunctionOutput:
+    print('Entering the Math Input GuardRail')
+    result = await Runner.run(starting_agent=check_maths_agent , input=input , max_turns=5)
+    return GuardrailFunctionOutput(
+        output_info=result.final_output,
+        tripwire_triggered=result.final_output.is_math  # Returns true or false based on the agent's answer
+    )
+
+@input_guardrail
+async def physics_guardrail(ctx : RunContextWrapper[None] , agent : Agent ,  input: str | list[TResponseInputItem])->GuardrailFunctionOutput:
+    print('Entering the Physics Input GuardRail')
+    result = await Runner.run(starting_agent=check_physics_agent , input=input , max_turns=5)
+    return GuardrailFunctionOutput(
+        output_info=result.final_output,
+        tripwire_triggered=result.final_output.is_physics  # Returns true or false based on the agent's answer
+    )
+class is_german(BaseModel):
+   is_german : bool
+   reason : str
+
+german_check_agent = Agent(
+    name = "german_checker",
+    instructions="Check whether the query is in german or not",
+    model=model,
+    output_type=is_german
+)
+class MessageOutput(BaseModel): 
+    response: str
+@output_guardrail
+async def german_guardrail(ctx : RunContextWrapper[None] , agent : Agent ,  output: MessageOutput)->GuardrailFunctionOutput:
+    print('Checking the Output using the Output GuardRail')
+    result = await Runner.run(starting_agent=german_check_agent , input=output.response , max_turns=5 )
+    return GuardrailFunctionOutput(
+        output_info=result.final_output,
+        tripwire_triggered=result.final_output.is_german # Returns true or false based on the agent's answer
+    )
+    return None
+
+class dummy_output(BaseModel):
+   res : str
+   query : str
+
+basic_agent = Agent(
+    name = "Basic Agent",
+    instructions=f'''{RECOMMENDED_PROMPT_PREFIX}You are a basic agent , Response in helpful manner''',
+    model = model,
+    input_guardrails=[math_guardrail , physics_guardrail],
+    output_guardrails=[german_guardrail],
+    output_type=MessageOutput
+)
+
+# -----------------------------------------------------------------------------------------------
+#                                EXCEPTIONS , EDGE CASES AND SCENARIOS
+# -----------------------------------------------------------------------------------------------
+
+# NOT RETURNING GUARDRAILFUNCTIONOUTPUT FROM THE GUARDRAIL
+
+#  atttribute Error : 'NoneType' object has no attribute 'tripwire_triggered'
+
+# SCHEMA MISMATCH BETWEEN THE LAST AGENT AND THE OUTPUT GUARDRAIL
+
+#  It raises an exception but although we have different classes but they have one same attribute that we are passing in the guardrail then that would also be OK.
+
+
+
+
+
 async def run_agent():
-    result = await Runner.run(starting_agent=basic_agent, input="Hi ! tell the weather of the paris" , max_turns=5)
-    print(result.final_output)
-    # print(result.final_output_as(weather_response , raise_if_incorrect_type=True))
-    print( result.to_input_list)
+    try:
+     result = await Runner.run(starting_agent=basic_agent, input="what is inertia" , max_turns=5)
+     print(result.final_output)
+    except  Exception as e:
+       if isinstance(e , InputGuardrailTripwireTriggered):
+          print('Dont ask math or physics questions')
+       elif isinstance(e , OutputGuardrailTripwireTriggered):   
+          print('Sorry! but we cannot respond in german!')
+       else:
+          print(e)   
+        
+    # # print(result.final_output_as(weather_response , raise_if_incorrect_type=True))
+    # print( result.to_input_list)
+    # print(handoff_to_maths_agent)
     
 
 asyncio.run(run_agent())
